@@ -32,12 +32,47 @@ async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
+     
+   
+      const database = client.db("ai-model-server");
+      const userCollection = database.collection("users");
+
+      app.post('/users', async (req, res) => {
+  try {
+     const newUser = {
+  name: req.body.name || "User",
+  email: req.body.email,
+  photoURL: req.body.photoURL || "https://i.ibb.co/9yRjFSp/user.png"
+}; 
+    const email = newUser.email;
+
+    if (!email) {
+      return res.status(400).send({ success: false, message: "Email is required" });
+    }
+
+    // Check if user already exists
+    const existingUser = await userCollection.findOne({ email: email });
+    if (existingUser) {
+      return res.send({ success: false, message: "User already exists" });
+    }
+
+    // Insert new user
+    const result = await userCollection.insertOne(newUser);
+    res.send({ success: true, result });
+  } catch (err) {
+    console.error("Error inserting user:", err);
+    res.status(500).send({ success: false, message: "Server error" });
+  }
+});
+
+
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
-    await client.close();
+    // await client.close();
   }
 }
 run().catch(console.dir);

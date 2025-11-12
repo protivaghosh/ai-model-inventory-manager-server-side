@@ -36,7 +36,48 @@ async function run() {
    
       const database = client.db("ai-model-server");
       const userCollection = database.collection("users");
+       const modelCollection = database.collection("models");
 
+         // ---------- Add Model ----------
+    app.post("/models", async (req, res) => {
+      try {
+        const modelData = req.body;
+
+        // Validation: all required fields must exist
+        const requiredFields = [
+          "name",
+          "framework",
+          "useCase",
+          "dataset",
+          "description",
+          "image",
+          "createdBy",
+        ];
+
+        for (const field of requiredFields) {
+          if (!modelData[field]) {
+            return res.status(400).send({
+              success: false,
+              message: `${field} is required`,
+            });
+          }
+        }
+
+        // Add extra fields
+        modelData.createdAt = new Date();
+        modelData.purchased = 0;
+
+        const result = await modelCollection.insertOne(modelData);
+        res.send({ success: true, result });
+      } catch (err) {
+        console.error("Error adding model:", err);
+        res.status(500).send({ success: false, message: "Server error" });
+      }
+    });
+
+    
+
+// user start
       app.post('/users', async (req, res) => {
   try {
      const newUser = {
@@ -55,6 +96,8 @@ async function run() {
     if (existingUser) {
       return res.send({ success: false, message: "User already exists" });
     }
+
+    // user end
 
     // Insert new user
     const result = await userCollection.insertOne(newUser);

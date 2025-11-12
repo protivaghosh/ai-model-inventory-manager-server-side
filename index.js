@@ -37,6 +37,7 @@ async function run() {
       const database = client.db("ai-model-server");
       const userCollection = database.collection("users");
        const modelCollection = database.collection("models");
+       const purchasesCollection = database.collection("purchases");
 
          // ---------- Add Model ----------
     app.post("/models", async (req, res) => {
@@ -88,6 +89,85 @@ async function run() {
       const model = await modelCollection.findOne({ _id: new ObjectId(id) });
       res.send(model);
     });
+
+ // ---------- Delete Model ----------
+    app.delete("/models/:id", async (req, res) => {
+      const id = req.params.id;
+      const { ObjectId } = require("mongodb");
+      const result = await modelCollection.deleteOne({ _id: new ObjectId(id) });
+      res.send(result);
+    });
+
+    // ---------- Update Model ----------
+    app.put("/models/:id", async (req, res) => {
+      const id = req.params.id;
+      const updatedData = req.body;
+      const { ObjectId } = require("mongodb");
+      const result = await modelCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: updatedData }
+      );
+      res.send(result);
+    });
+
+
+// purchase
+ app.post("/purchase/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const userEmail = req.body.email;
+    const { ObjectId } = require("mongodb");
+
+    console.log("🟡 Purchase Request Received for ID:", id, "by:", userEmail);
+
+    if (!userEmail) {
+      return res.status(400).json({ success: false, message: "Email is required" });
+    }
+
+    const model = await modelCollection.findOne({ _id: new ObjectId(id) });
+    if (!model) {
+      return res.status(404).json({ success: false, message: "Model not found" });
+    }
+
+    // Insert purchase
+    const purchaseDoc = {
+      modelId: id,
+      purchasedBy: userEmail,
+      name: model.name,
+      image: model.image,
+      framework: model.framework,
+      useCase: model.useCase,
+      createdAt: new Date(),
+    };
+    await purchasesCollection.insertOne(purchaseDoc);
+    console.log("🟢 Purchase inserted successfully!");
+
+    // ✅ Update purchase count safely
+    const updatedModel = await modelCollection.findOneAndUpdate(
+      { _id: new ObjectId(id) },
+      { $inc: { purchased: 1 } },
+      { returnDocument: "after" } // after update
+    );
+
+    console.log("🟢 Update Result:", updatedModel);
+
+    // ✅ Extra safety check
+    const newCount = updatedModel?.value?.purchased ?? model.purchased + 1;
+
+    res.status(200).json({
+      success: true,
+      message: "Purchase successful!",
+      purchasedCount: newCount,
+    });
+  } catch (err) {
+    console.error("🔥 Purchase Route Error:", err);
+    res.status(500).json({ success: false, message: err.message || "Server error" });
+  }
+});
+
+
+
+
 
 // user start
       app.post('/users', async (req, res) => {

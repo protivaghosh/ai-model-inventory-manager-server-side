@@ -75,7 +75,11 @@ async function run() {
       }
     });
 
-    
+        // ---------- Get All Models ----------
+    app.get("/models", async (req, res) => {
+      const models = await modelCollection.find().toArray();
+      res.send(models);
+    });
 
 // user start
       app.post('/users', async (req, res) => {

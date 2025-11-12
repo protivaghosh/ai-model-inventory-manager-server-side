@@ -76,11 +76,7 @@ async function run() {
       }
     });
 
-        // ---------- Get All Models ----------
-    app.get("/models", async (req, res) => {
-      const models = await modelCollection.find().toArray();
-      res.send(models);
-    });
+  
 
 //  ---------- Get Single Model (Details Page) ----------
     app.get("/models/:id", async (req, res) => {
@@ -109,6 +105,31 @@ async function run() {
       );
       res.send(result);
     });
+
+ // ---------- Get Models (all or by createdBy) ----------
+app.get("/models", async (req, res) => {
+  try {
+    const createdBy = req.query.createdBy;
+    let query = {};
+
+    if (createdBy) {
+      // Case-insensitive match
+      query = { createdBy: { $regex: new RegExp(`^${createdBy}$`, "i") } };
+    }
+
+    console.log("🧩 Filter Query:", query);
+
+    const models = await modelCollection.find(query).toArray();
+    console.log("📦 Found Models:", models.length);
+
+    res.send(models);
+  } catch (err) {
+    console.error("❌ Error fetching models:", err);
+    res.status(500).send({ message: "Server error fetching models" });
+  }
+});
+
+
 
 
 // purchase

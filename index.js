@@ -81,6 +81,14 @@ async function run() {
       res.send(models);
     });
 
+//  ---------- Get Single Model (Details Page) ----------
+    app.get("/models/:id", async (req, res) => {
+      const id = req.params.id;
+      const { ObjectId } = require("mongodb");
+      const model = await modelCollection.findOne({ _id: new ObjectId(id) });
+      res.send(model);
+    });
+
 // user start
       app.post('/users', async (req, res) => {
   try {

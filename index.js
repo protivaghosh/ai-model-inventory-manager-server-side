@@ -1,240 +1,226 @@
-const express = require('express')
-const cors = require('cors')
-const app = express()
-const port = process.env.PORT || 5000 ;
-require('dotenv').config()
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const express = require('express');
+const cors = require('cors');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+require('dotenv').config();
 
+const app = express();
+const port = process.env.PORT || 5000;
 
 // middleware
 app.use(cors());
 app.use(express.json());
 
-
+// MongoDB connection
 const uri = `mongodb+srv://${process.env.ai_model_user}:${process.env.ai_model_password}@cluster0.1wh8t.mongodb.net/?appName=Cluster0`;
-
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
     strict: true,
     deprecationErrors: true,
-  }
+  },
 });
 
-
-app.get('/', (req, res) => {
-  res.send(' ai-model-inventory-manager-server-side running .....')
-})
-
+ app.get('/', (req, res) => {
+      res.send('AI Model Inventory Manager Server is running...');
+    });
 
 async function run() {
   try {
-    // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
-     
-   
-      const database = client.db("ai-model-server");
-      const userCollection = database.collection("users");
-       const modelCollection = database.collection("models");
-       const purchasesCollection = database.collection("purchases");
+    const database = client.db("ai-model-server");
+    const userCollection = database.collection("users");
+    const modelCollection = database.collection("models");
+    const purchasesCollection = database.collection("purchases");
 
-         // ---------- Add Model ----------
+    console.log("✅ MongoDB connected successfully");
+
+    
+
+   
+    // Add Model
     app.post("/models", async (req, res) => {
       try {
         const modelData = req.body;
 
-        // Validation: all required fields must exist
-        const requiredFields = [
-          "name",
-          "framework",
-          "useCase",
-          "dataset",
-          "description",
-          "image",
-          "createdBy",
-        ];
-
+        const requiredFields = ["name","framework","useCase","dataset","description","image","createdBy"];
         for (const field of requiredFields) {
-          if (!modelData[field]) {
-            return res.status(400).send({
-              success: false,
-              message: `${field} is required`,
-            });
-          }
+          if (!modelData[field]) return res.status(400).json({ success: false, message: `${field} is required` });
         }
 
-        // Add extra fields
         modelData.createdAt = new Date();
         modelData.purchased = 0;
 
         const result = await modelCollection.insertOne(modelData);
-        res.send({ success: true, result });
+        res.json({ success: true, result });
       } catch (err) {
         console.error("Error adding model:", err);
-        res.status(500).send({ success: false, message: "Server error" });
+        res.status(500).json({ success: false, message: "Server error" });
       }
     });
 
-  
+    // Search Models
+    app.get("/models/search", async (req, res) => {
+      const { name } = req.query;
+      if (!name) return res.status(400).json({ message: "Search term required" });
 
-//  ---------- Get Single Model (Details Page) ----------
+      try {
+        const models = await modelCollection.find({ name: { $regex: name, $options: "i" } }).toArray();
+        res.json(models);
+      } catch (err) {
+        console.error("Search Error:", err);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
+
+    // Get Single Model
     app.get("/models/:id", async (req, res) => {
       const id = req.params.id;
-      const { ObjectId } = require("mongodb");
+      if (!ObjectId.isValid(id)) return res.status(400).json({ message: "Invalid model ID" });
+
       const model = await modelCollection.findOne({ _id: new ObjectId(id) });
-      res.send(model);
+      if (!model) return res.status(404).json({ message: "Model not found" });
+
+      res.json(model);
     });
 
- // ---------- Delete Model ----------
+    // Delete Model
     app.delete("/models/:id", async (req, res) => {
       const id = req.params.id;
-      const { ObjectId } = require("mongodb");
+      if (!ObjectId.isValid(id)) return res.status(400).json({ message: "Invalid model ID" });
+
       const result = await modelCollection.deleteOne({ _id: new ObjectId(id) });
-      res.send(result);
+      res.json(result);
     });
 
-    // ---------- Update Model ----------
+    // Update Model
     app.put("/models/:id", async (req, res) => {
       const id = req.params.id;
+      if (!ObjectId.isValid(id)) return res.status(400).json({ message: "Invalid model ID" });
+
       const updatedData = req.body;
-      const { ObjectId } = require("mongodb");
-      const result = await modelCollection.updateOne(
-        { _id: new ObjectId(id) },
-        { $set: updatedData }
-      );
-      res.send(result);
+      const result = await modelCollection.updateOne({ _id: new ObjectId(id) }, { $set: updatedData });
+      res.json(result);
     });
 
- // ---------- Get Models (all or by createdBy) ----------
+    // Get All Models (optionally by creator or framework)
 app.get("/models", async (req, res) => {
   try {
-    const createdBy = req.query.createdBy;
-    let query = {};
+    const { createdBy, framework, name } = req.query;
+    const query = {};
 
     if (createdBy) {
-      // Case-insensitive match
-      query = { createdBy: { $regex: new RegExp(`^${createdBy}$`, "i") } };
+      query.createdBy = { $regex: new RegExp(`^${createdBy}$`, "i") };
     }
 
-    console.log("🧩 Filter Query:", query);
+    if (framework) {
+      query.framework = framework; // exact match
+    }
+
+    if (name) {
+      query.name = { $regex: name, $options: "i" }; // name search
+    }
 
     const models = await modelCollection.find(query).toArray();
-    console.log("📦 Found Models:", models.length);
-
-    res.send(models);
+    res.json(models);
   } catch (err) {
-    console.error("❌ Error fetching models:", err);
-    res.status(500).send({ message: "Server error fetching models" });
+    console.error("Error fetching models:", err);
+    res.status(500).json({ message: "Server error fetching models" });
   }
 });
 
 
+    // Get latest models
+app.get('/latest-models', async(req, res)=>{
+      const cursor = modelCollection.find().sort({ createdAt: -1 }).limit(6);
+      const result = await cursor.toArray()
+      res.send(result);
+     })
 
 
-// purchase
- app.post("/purchase/:id", async (req, res) => {
-  try {
-    const id = req.params.id;
-    const userEmail = req.body.email;
-    const { ObjectId } = require("mongodb");
 
-    console.log("🟡 Purchase Request Received for ID:", id, "by:", userEmail);
 
-    if (!userEmail) {
-      return res.status(400).json({ success: false, message: "Email is required" });
-    }
 
-    const model = await modelCollection.findOne({ _id: new ObjectId(id) });
-    if (!model) {
-      return res.status(404).json({ success: false, message: "Model not found" });
-    }
+    // Purchase Model
+    app.post("/purchase/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const userEmail = req.body.email;
+        if (!userEmail) return res.status(400).json({ success: false, message: "Email is required" });
+        if (!ObjectId.isValid(id)) return res.status(400).json({ message: "Invalid model ID" });
 
-    // Insert purchase
-    const purchaseDoc = {
-      modelId: id,
-      purchasedBy: userEmail,
-      name: model.name,
-      image: model.image,
-      framework: model.framework,
-      useCase: model.useCase,
-      createdAt: new Date(),
-    };
-    await purchasesCollection.insertOne(purchaseDoc);
-    console.log("🟢 Purchase inserted successfully!");
+        const model = await modelCollection.findOne({ _id: new ObjectId(id) });
+        if (!model) return res.status(404).json({ success: false, message: "Model not found" });
 
-    // ✅ Update purchase count safely
-    const updatedModel = await modelCollection.findOneAndUpdate(
-      { _id: new ObjectId(id) },
-      { $inc: { purchased: 1 } },
-      { returnDocument: "after" } // after update
-    );
+        const purchaseDoc = {
+          modelId: id,
+          purchasedBy: userEmail,
+          name: model.name,
+          image: model.image,
+          framework: model.framework,
+          useCase: model.useCase,
+          createdAt: new Date(),
+        };
+        await purchasesCollection.insertOne(purchaseDoc);
 
-    console.log("🟢 Update Result:", updatedModel);
+        const updatedModel = await modelCollection.findOneAndUpdate(
+          { _id: new ObjectId(id) },
+          { $inc: { purchased: 1 } },
+          { returnDocument: "after" }
+        );
 
-    // ✅ Extra safety check
-    const newCount = updatedModel?.value?.purchased ?? model.purchased + 1;
-
-    res.status(200).json({
-      success: true,
-      message: "Purchase successful!",
-      purchasedCount: newCount,
+        res.json({
+          success: true,
+          message: "Purchase successful",
+          purchasedCount: updatedModel?.value?.purchased ?? model.purchased + 1,
+        });
+      } catch (err) {
+        console.error("Purchase Error:", err);
+        res.status(500).json({ success: false, message: err.message || "Server error" });
+      }
     });
-  } catch (err) {
-    console.error("🔥 Purchase Route Error:", err);
-    res.status(500).json({ success: false, message: err.message || "Server error" });
-  }
-});
 
+    // Get Purchases for User
+    app.get("/purchases", async (req, res) => {
+      try {
+        const purchasedBy = req.query.purchasedBy;
+        if (!purchasedBy) return res.status(400).json({ success: false, message: "Email is required" });
 
+        const purchases = await purchasesCollection.find({ purchasedBy }).toArray();
+        res.json(purchases);
+      } catch (err) {
+        console.error("Error fetching purchases:", err);
+        res.status(500).json({ success: false, message: "Server error fetching purchases" });
+      }
+    });
 
+    // Add User
+    app.post('/users', async (req, res) => {
+      try {
+        const { name = "User", email, photoURL = "https://i.ibb.co/9yRjFSp/user.png" } = req.body;
+        if (!email) return res.status(400).json({ success: false, message: "Email is required" });
 
+        const existingUser = await userCollection.findOne({ email });
+        if (existingUser) return res.json({ success: false, message: "User already exists" });
 
-// user start
-      app.post('/users', async (req, res) => {
-  try {
-     const newUser = {
-  name: req.body.name || "User",
-  email: req.body.email,
-  photoURL: req.body.photoURL || "https://i.ibb.co/9yRjFSp/user.png"
-}; 
-    const email = newUser.email;
+        const result = await userCollection.insertOne({ name, email, photoURL });
+        res.json({ success: true, result });
+      } catch (err) {
+        console.error("Error inserting user:", err);
+        res.status(500).json({ success: false, message: "Server error" });
+      }
+    });
 
-    if (!email) {
-      return res.status(400).send({ success: false, message: "Email is required" });
-    }
-
-    // Check if user already exists
-    const existingUser = await userCollection.findOne({ email: email });
-    if (existingUser) {
-      return res.send({ success: false, message: "User already exists" });
-    }
-
-    // user end
-
-    // Insert new user
-    const result = await userCollection.insertOne(newUser);
-    res.send({ success: true, result });
-  } catch (err) {
-    console.error("Error inserting user:", err);
-    res.status(500).send({ success: false, message: "Server error" });
-  }
-});
-
-
-
-    // Send a ping to confirm a successful connection
+    // Ping MongoDB
     await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    console.log("✅ Pinged MongoDB successfully");
+
   } finally {
-    // Ensures that the client will close when you finish/error
-    // await client.close();
+    // client.close(); // Don't close, server keeps running
   }
 }
-run().catch(console.dir);
 
+run().catch(console.error);
 
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`)
-})
-
+  console.log(`Server listening on port ${port}`);
+});

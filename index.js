@@ -26,7 +26,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
     const database = client.db("ai-model-server");
     const userCollection = database.collection("users");
     const modelCollection = database.collection("models");
@@ -158,7 +158,8 @@ app.get('/latest-models', async(req, res)=>{
           image: model.image,
           framework: model.framework,
           useCase: model.useCase,
-          createdAt: new Date(),
+          createdBy: model.createdBy,
+           createdAt: new Date(),
         };
         await purchasesCollection.insertOne(purchaseDoc);
 
@@ -211,7 +212,7 @@ app.get('/latest-models', async(req, res)=>{
     });
 
     // Ping MongoDB
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log("✅ Pinged MongoDB successfully");
 
   } finally {

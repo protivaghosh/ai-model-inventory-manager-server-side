@@ -211,6 +211,53 @@ app.get('/latest-models', async(req, res)=>{
       }
     });
 
+    
+// dashboard status
+   app.get("/dashboard-stats", async (req, res) => {
+  try {
+    const email = req.query.email;
+
+    if (!email) {
+      return res.status(400).json({ message: "Email required" });
+    }
+
+    const totalModels = await modelCollection.countDocuments();
+    const myModels = await modelCollection.countDocuments({ createdBy: email });
+    const purchased = await purchasesCollection.countDocuments({ purchasedBy: email });
+
+    const frameworkStats = await modelCollection.aggregate([
+      {
+        $group: {
+          _id: "$framework",
+          count: { $sum: 1 }
+        }
+      }
+    ]).toArray();
+
+    const recentModels = await modelCollection
+      .find()
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .toArray();
+
+    res.send({
+      stats: {
+        totalModels,
+        myModels,
+        purchased,
+        frameworkStats
+      },
+      recentModels
+    });
+
+  } catch (error) {
+    console.error("Dashboard stats error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
+
     // Ping MongoDB
     // await client.db("admin").command({ ping: 1 });
     console.log("✅ Pinged MongoDB successfully");
